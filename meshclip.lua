@@ -1,26 +1,67 @@
 MESHCLIP = MESHCLIP or {}
 include("meeclip.lua")
 
+
 local function mesh_preproc(tris)
 
-	if not (MESHCLIP.plane) then return tris end	
-	
-	local tris_out = {}
-	local tris_grouped = { {} }
-
 	local parent = MESHCLIP.parent
-	local plane = MESHCLIP.plane
+	local share_cache = {}
 
-	--first we need to find where the plane is in prop local space
-	local origin, ang = WorldToLocal( plane:GetPos(), plane:GetAngles(), parent:GetPos(), parent:GetAngles() )
+	local maxs = Vector(0,0,0)
+	local mins = Vector(0,0,0)
+	
+	for k, v in ipairs(tris) do
+		local pos = v.pos
+		for n=1, 3 do
+			maxs[n] = math.max(maxs[n],pos[n])
+			mins[n] = math.min(mins[n],pos[n])
+		end
+	end
 
-	-- now we precompute some values
-	local plane_up = ang:Right()
+	maxs = maxs*1.01
+	mins = mins*1.01
 
-	meeMeshSplit(tris, origin, plane_up, tris_out, tris_grouped)
-	-- PrintTable(tris_out)
+	local box = maxs-mins
 
-	return tris_out
+	local longest = math.max(box[1],box[2],box[3])
+	if(longest == box[1]) then longest = 1 
+	elseif(longest == box[2]) then longest = 2
+	else longest = 3 end
+
+	local axis = Vector(0,0,0)
+	axis[longest] = 1
+
+	print( axis )
+	print(maxs, mins)
+
+	local slices = {}
+
+	local COUNT = 4
+	local STEP  = 1/COUNT
+
+	local tris_all = {}
+	local caching = {}
+
+	for i=0, COUNT do
+		local t = i/COUNT
+
+		local tris_right = meeMeshSplit(tris, mins + axis*box[longest]*(t), axis, share_cache, i) 
+		tris_right = meeMeshSplit(tris_right, mins + axis*box[longest]*(t+STEP), -axis, share_cache, i) 
+
+		slices[i] = tris_right
+		for k, v in ipairs(tris_right) do
+			if not caching[v.pos] then
+				v.pos = v.pos + Vector(0,0,v.slice * 10)
+				caching[v.pos] = true
+			end
+		end
+			
+		table.Add(tris_all,tris_right)
+	end
+
+	PrintTable(tris_all)
+
+	return tris_all
 
 end
 
@@ -55,8 +96,7 @@ local function MeshClip()
 		if ( !vismeshes ) then return end
 
 		for k, vismesh in ipairs(vismeshes) do
-			local set1, set2, set3
-			vismesh.triangles, set1, set2, set3 = mesh_preproc(vismesh.triangles)
+			vismesh.triangles = mesh_preproc(vismesh.triangles)
 			if( #vismesh.triangles > 0 ) then
 
 				self.Meshes[#self.Meshes+1] = Mesh( self.Materials[k] )  -- USERDATAS ARE STUPID!!!
@@ -71,7 +111,7 @@ local function MeshClip()
 	local wire = Material("models/wireframe")
 
 	function MeshClip:Draw()
-
+	
 		self:DrawModel() -- lighting bug fix
 		local parent = MESHCLIP.parent
 
@@ -85,7 +125,7 @@ local function MeshClip()
 			render.SetMaterial(wire)
 			cam.PushModelMatrix( transform )
 				for k, submesh in ipairs(meshes) do
-				 	render.SetMaterial( materials[k] )
+				 	--render.SetMaterial( materials[k] )
 				 	submesh:Draw()
 				end
 			cam.PopModelMatrix()
@@ -138,6 +178,6 @@ function MESHCLIP.unfuckmatricies()
 	end
 end
 
-MESHCLIP.spawn("models/props_vehicles/truck001a.mdl")
+MESHCLIP.spawn("models/hunter/blocks/cube1x1x1.mdl")
 
 hook.Remove( "KeyPress", "MeshClip.Use" )

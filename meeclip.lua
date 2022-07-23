@@ -1,17 +1,33 @@
 // Thanks to Mee for this code (I tried once and was too lazy to make further attempts)
 
 // tris in are in the format {{pos = value}, {pos = value2}}
-function meeMeshSplit(tris, plane_pos, plane_dir, VERTS_ALL, VERTS_GROUPED)
+function meeMeshSplit(tris, plane_pos, plane_dir, vertex_share_cache, slice)
+
+    local tris = table.Copy(tris) --table.DeSanitise( table.Copy( table.Sanitise(tris) ) ) -- HORROR
+    PrintTable(tris)
 
     local util_IntersectRayWithPlane = util.IntersectRayWithPlane
 
     local function mix(a,b,fac)
         return a*(1-fac) + b*fac
     end 
+    
+    local function v2s(v)
+        return math.Round(v[1], 5) .. ',' .. math.Round(v[2], 5) .. ',' .. math.Round(v[3], 5)
+    end
+    local function getCache(p3)
+        local s = v2s(p3)
+        local v = vertex_share_cache[s]
+        if not v then
+            vertex_share_cache[s] = p3
+        end
+        return vertex_share_cache[s]
+    end
 
     function rayPlaneIntersect(v1, v2, plane_pos, plane_dir)
         local p3 = util_IntersectRayWithPlane(v1.pos, v2.pos - v1.pos, plane_pos, plane_dir)
         if p3 then
+
             local vert = {}
             vert.pos = p3
             local dist = v1.pos:Distance(v2.pos)
@@ -21,26 +37,35 @@ function meeMeshSplit(tris, plane_pos, plane_dir, VERTS_ALL, VERTS_GROUPED)
             vert.normal = mix(v1.normal,v2.normal,fac)
             vert.tangent = mix(v1.tangent,v2.tangent,fac)
             return vert
+
         end
     end
 
-    local VERTS_A = VERTS_GROUPED[#VERTS_GROUPED]
-    
-    local A_INDEX = #VERTS_A
+    local TRIS_A = {}
+    local A_TRIS_INDEX = 0
 
-    VERTS_GROUPED[#VERTS_GROUPED + 1] = {}
-    local VERTS_B = VERTS_GROUPED[#VERTS_GROUPED] // becomes VERTS_A next split
-    local B_INDEX = 0
+    local VERTS_A = {}
+    local A_INDEX = 0
+
+    local TRIS_B = {}
+    local B_TRIS_INDEX = 0
 
     // loop through all triangles in the mesh
     for i = 1, #tris, 3 do
+
         local v1 = tris[i    ]
         local v2 = tris[i + 1]
         local v3 = tris[i + 2]
 
-        local p1 = tris[i    ].pos
-        local p2 = tris[i + 1].pos
-        local p3 = tris[i + 2].pos
+        assert( (v1.slice or 0 == v2.slice or 0) and (v2.slice or 0 == v3.slice or 0), "slice consistency failed" )
+
+        local p1 = v1.pos
+        local p2 = v2.pos
+        local p3 = v3.pos
+
+        v1.pos = Vector(p1.x,p1.y,p1.z)
+        v2.pos = Vector(p2.x,p2.y,p2.z)
+        v3.pos = Vector(p3.x,p3.y,p3.z)
 
         // get points that are valid sides of the plane
 
@@ -50,19 +75,19 @@ function meeMeshSplit(tris, plane_pos, plane_dir, VERTS_ALL, VERTS_GROUPED)
         
         // if all points should be kept, add triangle
         if p1_valid and p2_valid and p3_valid then -- half A
-            VERTS_A[A_INDEX + 1] = v1
-            VERTS_A[A_INDEX + 2] = v2
-            VERTS_A[A_INDEX + 3] = v3
-            A_INDEX = A_INDEX + 3
+            TRIS_A[A_TRIS_INDEX + 1] = v1
+            TRIS_A[A_TRIS_INDEX + 2] = v2
+            TRIS_A[A_TRIS_INDEX + 3] = v3
+            A_TRIS_INDEX = A_TRIS_INDEX + 3
             continue
         end
         
         // if none of the points should be kept, skip triangle
         if !p1_valid and !p2_valid and !p3_valid then -- half B
-            VERTS_B[B_INDEX + 1] = v1
-            VERTS_B[B_INDEX + 2] = v2
-            VERTS_B[B_INDEX + 3] = v3
-            B_INDEX = B_INDEX + 3
+            -- TRIS_B[B_TRIS_INDEX + 1] = v1
+            -- TRIS_B[B_TRIS_INDEX + 2] = v2
+            -- TRIS_B[B_TRIS_INDEX + 3] = v3
+            -- B_TRIS_INDEX = B_TRIS_INDEX + 3
             continue
         end
         
@@ -78,63 +103,52 @@ function meeMeshSplit(tris, plane_pos, plane_dir, VERTS_ALL, VERTS_GROUPED)
                 if !point1 then point1 = v3 end
                 if !point2 then point2 = v3 end
 
-                VERTS_A[A_INDEX + 1] = v1     -- forwards, half A
-                VERTS_A[A_INDEX + 2] = v2
-                VERTS_A[A_INDEX + 3] = point1
+                TRIS_A[A_TRIS_INDEX + 1] = v1     -- forwards, half A
+                TRIS_A[A_TRIS_INDEX + 2] = v2
+                TRIS_A[A_TRIS_INDEX + 3] = point1
 
-                VERTS_A[A_INDEX + 6] = v2     -- backwards, half A
-                VERTS_A[A_INDEX + 5] = point1
-                VERTS_A[A_INDEX + 4] = point2
+                TRIS_A[A_TRIS_INDEX + 6] = v2     -- backwards, half A
+                TRIS_A[A_TRIS_INDEX + 5] = point1
+                TRIS_A[A_TRIS_INDEX + 4] = point2
                 
-                A_INDEX = A_INDEX + 6
-
-                VERTS_B[B_INDEX + 1] = v3     -- forwards, half B
-                VERTS_B[B_INDEX + 2] = point1
-                VERTS_B[B_INDEX + 3] = point2
-
-                B_INDEX = B_INDEX + 3
+                A_TRIS_INDEX = A_TRIS_INDEX + 6
             elseif p3_valid then  // p1 = valid, p2 = invalid, p3 = valid
                 point1 = rayPlaneIntersect(v1, v2, plane_pos, plane_dir)
                 point2 = rayPlaneIntersect(v3, v2, plane_pos, plane_dir)
                 if !point1 then point1 = v2 end
                 if !point2 then point2 = v2 end
                 
-                VERTS_A[A_INDEX + 3] = v1     -- backwards, half A
+                TRIS_A[A_TRIS_INDEX + 3] = v1     -- backwards, half A
+                TRIS_A[A_TRIS_INDEX + 2] = v3
+                TRIS_A[A_TRIS_INDEX + 1] = point1
+
+                TRIS_A[A_TRIS_INDEX + 4] = v3     -- forwards, half A
+                TRIS_A[A_TRIS_INDEX + 5] = point1
+                TRIS_A[A_TRIS_INDEX + 6] = point2
+
+                A_TRIS_INDEX = A_TRIS_INDEX + 6
+
+                VERTS_A[A_INDEX + 1] = v1
                 VERTS_A[A_INDEX + 2] = v3
-                VERTS_A[A_INDEX + 1] = point1
+                VERTS_A[A_INDEX + 3] = point1
+                if point2 ~= point1 then
+                    VERTS_A[A_INDEX + 4] = point2
+                    A_INDEX = A_INDEX + 4
+                else
+                    A_INDEX = A_INDEX + 3
+                end
 
-                VERTS_A[A_INDEX + 4] = v3     -- forwards, half A
-                VERTS_A[A_INDEX + 5] = point1
-                VERTS_A[A_INDEX + 6] = point2
-
-                A_INDEX = A_INDEX + 6
-
-                VERTS_B[B_INDEX + 3] = v2     -- backwards, half B
-                VERTS_B[B_INDEX + 2] = point1
-                VERTS_B[B_INDEX + 1] = point2
-
-                B_INDEX = B_INDEX + 3
             else                    // p1 = valid, p2 = invalid, p3 = invalid
                 point1 = rayPlaneIntersect(v1, v2, plane_pos, plane_dir)
                 point2 = rayPlaneIntersect(v1, v3, plane_pos, plane_dir)
                 if !point1 then point1 = v2 end
                 if !point2 then point2 = v3 end
 
-                VERTS_A[A_INDEX + 1] = v1     -- forwards, half A
-                VERTS_A[A_INDEX + 2] = point1
-                VERTS_A[A_INDEX + 3] = point2
+                TRIS_A[A_TRIS_INDEX + 1] = v1     -- forwards, half A
+                TRIS_A[A_TRIS_INDEX + 2] = point1
+                TRIS_A[A_TRIS_INDEX + 3] = point2
                 
-                A_INDEX = A_INDEX + 3
-
-                VERTS_B[B_INDEX + 3] = point1     -- forwards, half B
-                VERTS_B[B_INDEX + 2] = point2
-                VERTS_B[B_INDEX + 1] = v2
-
-                VERTS_B[B_INDEX + 4] = v2     -- forwards, half B
-                VERTS_B[B_INDEX + 5] = v3
-                VERTS_B[B_INDEX + 6] = point2
-                
-                B_INDEX = B_INDEX + 6
+                A_TRIS_INDEX = A_TRIS_INDEX + 3
             end
         elseif p2_valid then
             if p3_valid then      // p1 = invalid, p2 = valid, p3 = valid
@@ -143,42 +157,26 @@ function meeMeshSplit(tris, plane_pos, plane_dir, VERTS_ALL, VERTS_GROUPED)
                 if !point1 then point1 = v1 end
                 if !point2 then point2 = v1 end
 
-                VERTS_A[A_INDEX + 1] = v2     -- forwards, half A
-                VERTS_A[A_INDEX + 2] = v3
-                VERTS_A[A_INDEX + 3] = point1
+                TRIS_A[A_TRIS_INDEX + 1] = v2     -- forwards, half A
+                TRIS_A[A_TRIS_INDEX + 2] = v3
+                TRIS_A[A_TRIS_INDEX + 3] = point1
                 
-                VERTS_A[A_INDEX + 6] = v3     -- backwards, half A
-                VERTS_A[A_INDEX + 5] = point1
-                VERTS_A[A_INDEX + 4] = point2
+                TRIS_A[A_TRIS_INDEX + 6] = v3     -- backwards, half A
+                TRIS_A[A_TRIS_INDEX + 5] = point1
+                TRIS_A[A_TRIS_INDEX + 4] = point2
                 
-                A_INDEX = A_INDEX + 6
-
-                VERTS_B[B_INDEX + 1] = v1     -- forwards, half B
-                VERTS_B[B_INDEX + 2] = point1
-                VERTS_B[B_INDEX + 3] = point2
-
-                B_INDEX = B_INDEX + 3
+                A_TRIS_INDEX = A_TRIS_INDEX + 6
             else                    // p1 = invalid, p2 = valid, p3 = invalid
                 point1 = rayPlaneIntersect(v2, v1, plane_pos, plane_dir)
                 point2 = rayPlaneIntersect(v2, v3, plane_pos, plane_dir)
                 if !point1 then point1 = v1 end
                 if !point2 then point2 = v3 end
 
-                VERTS_A[A_INDEX + 3] = v2     -- backwards, half A
-                VERTS_A[A_INDEX + 2] = point1
-                VERTS_A[A_INDEX + 1] = point2
+                TRIS_A[A_TRIS_INDEX + 3] = v2     -- backwards, half A
+                TRIS_A[A_TRIS_INDEX + 2] = point1
+                TRIS_A[A_TRIS_INDEX + 1] = point2
                 
-                A_INDEX = A_INDEX + 3
-
-                VERTS_B[B_INDEX + 1] = v1     -- forwards, half B
-                VERTS_B[B_INDEX + 2] = point1
-                VERTS_B[B_INDEX + 3] = point2
-
-                VERTS_B[B_INDEX + 4] = v3     -- forwards, half B
-                VERTS_B[B_INDEX + 5] = v1
-                VERTS_B[B_INDEX + 6] = point2
-                
-                B_INDEX = B_INDEX + 6
+                A_TRIS_INDEX = A_TRIS_INDEX + 3
             end
         else                       // p1 = invalid, p2 = invalid, p3 = valid
         
@@ -187,29 +185,27 @@ function meeMeshSplit(tris, plane_pos, plane_dir, VERTS_ALL, VERTS_GROUPED)
             if !point1 then point1 = v1 end
             if !point2 then point2 = v2 end
 
-            VERTS_A[A_INDEX + 1] = v3    -- forwards, half A
-            VERTS_A[A_INDEX + 2] = point1
-            VERTS_A[A_INDEX + 3] = point2
+            TRIS_A[A_TRIS_INDEX + 1] = v3    -- forwards, half A
+            TRIS_A[A_TRIS_INDEX + 2] = point1
+            TRIS_A[A_TRIS_INDEX + 3] = point2
             
-            A_INDEX = A_INDEX + 3
-
-            VERTS_B[B_INDEX + 3] = v1     -- backwards, half B
-            VERTS_B[B_INDEX + 2] = point1
-            VERTS_B[B_INDEX + 1] = point2
-
-            VERTS_B[B_INDEX + 6] = v1     -- backwards, half B
-            VERTS_B[B_INDEX + 5] = point2
-            VERTS_B[B_INDEX + 4] = v2
-                
-            B_INDEX = B_INDEX + 6
+            A_TRIS_INDEX = A_TRIS_INDEX + 3
         end
 
     end
 
-    for k, group in ipairs(VERTS_GROUPED) do
-        table.Add(VERTS_ALL, group)
+    for k, v in ipairs(TRIS_A) do
+        v.slice = math.max(v.slice or 0, slice)
+    end
+    
+    for i = 1, #TRIS_A, 3 do
+        local v1 = TRIS_A[i    ]
+        local v2 = TRIS_A[i + 1]
+        local v3 = TRIS_A[i + 2]
+
+        assert( (v1.slice or 0 == v2.slice or 0) and (v2.slice or 0 == v3.slice or 0), "slice consistency failed" )
     end
 
-    PrintTable(VERTS_ALL)
+    return TRIS_A
 
 end

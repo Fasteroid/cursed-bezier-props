@@ -1,4 +1,6 @@
 MESHCLIP = MESHCLIP or {}
+
+include("vertexlinker.lua")
 include("meeclip.lua")
 include("fastslice.lua")
 
@@ -48,6 +50,9 @@ local function mesh_preproc(tris)
 	local tris_all = {}
 	local caching = {}
 
+	VERTEXLINKER.Reset()
+	VERTEXLINKER.Link(tris)
+
 	for i=0, COUNT do
 		local t = i/COUNT
 
@@ -55,15 +60,18 @@ local function mesh_preproc(tris)
 		tris_right = meeMeshSplit(tris_right, mins + axis*axisLen*(t+STEP), -axis, share_cache, i) 
 
 		slices[i] = tris_right
-		for k, v in ipairs(tris_right) do
-			if not caching[v.pos] then
-				v.pos = v.pos + Vector(0,0,v.slice * 10)
-				caching[v.pos] = true
-			end
-		end
 			
 		table.Add(tris_all,tris_right)
 	end
+
+	for k, v in ipairs(tris_all) do
+		if not caching[v.pos] then
+			caching[v.pos] = true
+			tris_all[k].pos:Add( Vector(0,0,v.slice * 10) )
+		end
+	end
+
+	print( VERTEXLINKER.countUnique() )
 
 	-- local tri_slice = 
 	-- 	fastMeshSlice(tris, 
@@ -152,7 +160,7 @@ local function MeshClip(parent)
 					-- these are fucking stupid but they work
 					materials[k]:SetVector("$color",color)
 					materials[k]:SetFloat("$alpha",alpha)
-					render.SetMaterial( materials[k] )
+					--render.SetMaterial( materials[k] )
 				 	submesh:Draw()
 				end
 			cam.PopModelMatrix()

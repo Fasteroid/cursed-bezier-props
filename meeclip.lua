@@ -2,6 +2,8 @@
 
 local util_IntersectRayWithPlane = util.IntersectRayWithPlane
 
+local GetShared = VERTEXLINKER.GetShared
+
 local function mix(a,b,fac)
     return a*(1-fac) + b*fac
 end 
@@ -10,7 +12,7 @@ local function rayPlaneIntersect(v1, v2, plane_pos, plane_dir)
     local p3 = util_IntersectRayWithPlane(v1.pos, v2.pos - v1.pos, plane_pos, plane_dir)
     if p3 then
         local vert = {}
-        vert.pos = p3
+        vert.pos = GetShared(p3)
         local dist = v1.pos:Distance(v2.pos)
         local fac = p3:Distance(v1.pos) / dist
         vert.u = mix(v1.u,v2.u,fac)
@@ -28,7 +30,6 @@ end
 // tris in are in the format {{pos = value}, {pos = value2}}
 function meeMeshSplit(tris, plane_pos, plane_dir, vertex_share_cache, slice)
 
-    local tris = table.Copy(tris) --table.DeSanitise( table.Copy( table.Sanitise(tris) ) ) -- HORROR
     PrintTable(tris)
 
     local TRIS_A = {}
@@ -47,15 +48,15 @@ function meeMeshSplit(tris, plane_pos, plane_dir, vertex_share_cache, slice)
         local v2 = tris[i + 1]
         local v3 = tris[i + 2]
 
-        assert( (v1.slice or 0 == v2.slice or 0) and (v2.slice or 0 == v3.slice or 0), "slice consistency failed" )
+        v1.pos = GetShared(v1.pos)
+        v2.pos = GetShared(v2.pos)
+        v3.pos = GetShared(v3.pos)
 
         local p1 = v1.pos
         local p2 = v2.pos
         local p3 = v3.pos
 
-        v1.pos = Vector(p1.x,p1.y,p1.z)
-        v2.pos = Vector(p2.x,p2.y,p2.z)
-        v3.pos = Vector(p3.x,p3.y,p3.z)
+        assert( (v1.slice or 0 == v2.slice or 0) and (v2.slice or 0 == v3.slice or 0), "slice consistency failed" )
 
         // get points that are valid sides of the plane
 

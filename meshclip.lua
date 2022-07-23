@@ -1,12 +1,8 @@
 MESHCLIP = MESHCLIP or {}
 include("meeclip.lua")
+include("fastslice.lua")
 
-
-local function mesh_preproc(tris)
-
-	local parent = MESHCLIP.parent
-	local share_cache = {}
-
+local function getBB(tris)
 	local maxs = Vector(0,0,0)
 	local mins = Vector(0,0,0)
 	
@@ -18,11 +14,14 @@ local function mesh_preproc(tris)
 		end
 	end
 
+	-- scale these up a tiny bit so we don't trim tris flush with the BB edge
 	maxs = maxs*1.01
 	mins = mins*1.01
 
-	local box = maxs-mins
+	return maxs, mins, maxs-mins
+end
 
+local function getLongestAxis(box)
 	local longest = math.max(box[1],box[2],box[3])
 	if(longest == box[1]) then longest = 1 
 	elseif(longest == box[2]) then longest = 2
@@ -30,9 +29,16 @@ local function mesh_preproc(tris)
 
 	local axis = Vector(0,0,0)
 	axis[longest] = 1
+	return axis, box[longest]
+end
 
-	print( axis )
-	print(maxs, mins)
+local function mesh_preproc(tris)
+
+	local parent = MESHCLIP.parent
+	local share_cache = {}
+
+	local maxs, mins, box = getBB(tris)
+	local axis, axisLen = getLongestAxis(box)
 
 	local slices = {}
 
@@ -45,8 +51,8 @@ local function mesh_preproc(tris)
 	for i=0, COUNT do
 		local t = i/COUNT
 
-		local tris_right = meeMeshSplit(tris, mins + axis*box[longest]*(t), axis, share_cache, i) 
-		tris_right = meeMeshSplit(tris_right, mins + axis*box[longest]*(t+STEP), -axis, share_cache, i) 
+		local tris_right = meeMeshSplit(tris, mins + axis*axisLen*(t), axis, share_cache, i) 
+		tris_right = meeMeshSplit(tris_right, mins + axis*axisLen*(t+STEP), -axis, share_cache, i) 
 
 		slices[i] = tris_right
 		for k, v in ipairs(tris_right) do
@@ -59,16 +65,27 @@ local function mesh_preproc(tris)
 		table.Add(tris_all,tris_right)
 	end
 
-	PrintTable(tris_all)
+	-- local tri_slice = 
+	-- 	fastMeshSlice(tris, 
+	-- 		mins + axis*axisLen*(0.25), axis, 
+	-- 		mins + axis*axisLen*(0.75), -axis
+	-- ) 
+
 
 	return tris_all
 
 end
 
-local function MeshClip()
+MESHCLIP.meshes = MESHCLIP.meshes or {}
+
+local function MeshClip(parent)
+
+	if not parent or not IsValid(parent) then error("no parent ent") end
 
 	local MeshClip = ents.CreateClientside("starfall_hologram")
-	MESHCLIP.testmesh = MeshClip
+	MESHCLIP.meshes[parent] = MeshClip
+	MeshClip:SetParent(parent)
+	MeshClip.parent = parent
 
 	function MeshClip:Finalize()
 		self:Activate()
@@ -111,9 +128,8 @@ local function MeshClip()
 	local wire = Material("models/wireframe")
 
 	function MeshClip:Draw()
-	
 		self:DrawModel() -- lighting bug fix
-		local parent = MESHCLIP.parent
+		local parent = self.parent
 
 		if ( self.Meshes ) then
 			local meshes = self.Meshes
@@ -122,15 +138,25 @@ local function MeshClip()
 			local transform = Matrix()
 			transform:Translate( parent:GetPos() )
 			transform:Rotate( parent:GetAngles() )
+
 			render.SetMaterial(wire)
+			local color = parent:GetColor()
+			local alpha = color.a / 255
+			color = Vector(color.r/255,color.g/255,color.b/255)
+
+			local flashlight = LocalPlayer():FlashlightIsOn()
+			
+
 			cam.PushModelMatrix( transform )
 				for k, submesh in ipairs(meshes) do
-				 	--render.SetMaterial( materials[k] )
+					-- these are fucking stupid but they work
+					materials[k]:SetVector("$color",color)
+					materials[k]:SetFloat("$alpha",alpha)
+					render.SetMaterial( materials[k] )
 				 	submesh:Draw()
 				end
 			cam.PopModelMatrix()
 		end
-
 	end
 
 	return MeshClip
@@ -141,20 +167,21 @@ end
 
 //
 
-local testmesh
 
 ---- Testing Stuff ----
+local testmesh
+
 function MESHCLIP.spawn(mdl)
 
-	if MESHCLIP.testmesh and IsValid(MESHCLIP.testmesh) then
-		chat.AddText("Removing old meshes")
-		MESHCLIP.testmesh:Remove()
+	for k, msh in pairs(MESHCLIP.meshes) do
+		if msh and IsValid(msh) then
+			chat.AddText("Removing old mesh")
+			msh:Remove()
+		end
 	end
 
-	testmesh = MeshClip()
-	MESHCLIP.testmesh = testmesh
+	testmesh = MeshClip( MESHCLIP.parent )
 	testmesh:SetPos( MESHCLIP.parent:GetPos() )
-	testmesh:SetParent( MESHCLIP.parent )
 	testmesh:UseModel(mdl)
 	testmesh:Finalize()
 
@@ -179,5 +206,3 @@ function MESHCLIP.unfuckmatricies()
 end
 
 MESHCLIP.spawn("models/hunter/blocks/cube1x1x1.mdl")
-
-hook.Remove( "KeyPress", "MeshClip.Use" )

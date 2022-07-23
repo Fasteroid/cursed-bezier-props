@@ -1,45 +1,35 @@
 // Thanks to Mee for this code (I tried once and was too lazy to make further attempts)
 
+local util_IntersectRayWithPlane = util.IntersectRayWithPlane
+
+local function mix(a,b,fac)
+    return a*(1-fac) + b*fac
+end 
+
+local function rayPlaneIntersect(v1, v2, plane_pos, plane_dir)
+    local p3 = util_IntersectRayWithPlane(v1.pos, v2.pos - v1.pos, plane_pos, plane_dir)
+    if p3 then
+        local vert = {}
+        vert.pos = p3
+        local dist = v1.pos:Distance(v2.pos)
+        local fac = p3:Distance(v1.pos) / dist
+        vert.u = mix(v1.u,v2.u,fac)
+        vert.v = mix(v1.v,v2.v,fac)
+        vert.normal = mix(v1.normal,v2.normal,fac)
+        vert.tangent = mix(v1.tangent,v2.tangent,fac)
+        vert.userdata = {}
+        for i=1, 4 do
+            vert.userdata[i] = mix(v1.userdata[i],v2.userdata[i],fac)
+        end
+        return vert
+    end
+end
+
 // tris in are in the format {{pos = value}, {pos = value2}}
 function meeMeshSplit(tris, plane_pos, plane_dir, vertex_share_cache, slice)
 
     local tris = table.Copy(tris) --table.DeSanitise( table.Copy( table.Sanitise(tris) ) ) -- HORROR
     PrintTable(tris)
-
-    local util_IntersectRayWithPlane = util.IntersectRayWithPlane
-
-    local function mix(a,b,fac)
-        return a*(1-fac) + b*fac
-    end 
-    
-    local function v2s(v)
-        return math.Round(v[1], 5) .. ',' .. math.Round(v[2], 5) .. ',' .. math.Round(v[3], 5)
-    end
-    local function getCache(p3)
-        local s = v2s(p3)
-        local v = vertex_share_cache[s]
-        if not v then
-            vertex_share_cache[s] = p3
-        end
-        return vertex_share_cache[s]
-    end
-
-    function rayPlaneIntersect(v1, v2, plane_pos, plane_dir)
-        local p3 = util_IntersectRayWithPlane(v1.pos, v2.pos - v1.pos, plane_pos, plane_dir)
-        if p3 then
-
-            local vert = {}
-            vert.pos = p3
-            local dist = v1.pos:Distance(v2.pos)
-            local fac = p3:Distance(v1.pos) / dist
-            vert.u = mix(v1.u,v2.u,fac)
-            vert.v = mix(v1.v,v2.v,fac)
-            vert.normal = mix(v1.normal,v2.normal,fac)
-            vert.tangent = mix(v1.tangent,v2.tangent,fac)
-            return vert
-
-        end
-    end
 
     local TRIS_A = {}
     local A_TRIS_INDEX = 0

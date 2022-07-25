@@ -1,3 +1,5 @@
+if SERVER then return end
+
 local ControlPoints = {}
 local ENT = scripted_ents.Get("base_anim")
 
@@ -5,10 +7,12 @@ ENT.Type            = "anim"
 ENT.Base            = "base_anim"
 
 ENT.Dragging = false
+ENT.Color1 = Color(100,0,0)
+ENT.Color2 = Color(255,155,155)
 
 function ENT:Initialize()
     ControlPoints[self] = true
-    self:SetModel("models/pac/default.mdl")
+    self:SetModel("models/hunter/plates/plate.mdl")
 end
 
 function ENT:StartDrag()
@@ -21,20 +25,17 @@ function ENT:EndDrag()
     chat.AddText("ENT:EndDrag()")
 end
 
+function ENT:Drag()
+    self:SetPos( LocalPlayer():GetEyeTrace().HitPos )
+end
+
 function ENT:OnRemove()
     ControlPoints[self] = nil
 end
 
-function ENT:IsHovered() -- TODO: consider caching results every frame
-    local trace = LocalPlayer():GetEyeTrace()
-    PrintTable(trace)
-    local pos, norm, frac = util.IntersectRayWithOBB(trace.StartPos, (trace.HitPos - trace.StartPos)*999, self:GetPos(), self:GetAngles(), self:OBBMins(), self:OBBMaxs())
-    return frac
-end
-
 function ENT:Thinkk() -- TODO: why does think not run every frame like it should?
     if self.Dragging then
-        self:SetPos( LocalPlayer():GetEyeTrace().HitPos )
+        self:Drag()
     end
 end
 hook.Add("Think","Bezier.ControlPoints.ThinkFix",function()
@@ -43,7 +44,26 @@ hook.Add("Think","Bezier.ControlPoints.ThinkFix",function()
     end
 end)
 
-scripted_ents.Register(ENT, "bezier_control")
+local radius = 3
+local obbmax = Vector(radius,radius,radius)
+local obbmin = -obbmax
+local noangle = Angle(0,0,0)
+
+function ENT:IsHovered() -- TODO: consider caching results every frame
+    local trace = LocalPlayer():GetEyeTrace()
+    local pos, norm, frac = util.IntersectRayWithOBB(trace.StartPos, (trace.HitPos - trace.StartPos)*999, self:GetPos(), noangle, obbmin, obbmax)
+    return frac
+end
+
+function ENT:Draw()
+    local col = (self:IsHovered() or self.Dragging) and self.Color2 or self.Color1
+    render.SetColorMaterial()
+    render.DrawSphere(self:GetPos(), radius, 16, 9, col)
+end
+
+
+
+scripted_ents.Register(ENT, "bezier_drag")
 
 -- god I hate everything, this code is so horrible
 

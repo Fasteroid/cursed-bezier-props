@@ -44,7 +44,7 @@ local function mesh_preproc(tris)
 
 	local slices = {}
 
-	local COUNT = 4
+	local COUNT = 8
 	local STEP  = 1/COUNT
 
 	local tris_all = {}
@@ -160,8 +160,14 @@ local function MeshClip(parent)
 					-- these are fucking stupid but they work
 					materials[k]:SetVector("$color",color)
 					materials[k]:SetFloat("$alpha",alpha)
-					--render.SetMaterial( materials[k] )
-				 	submesh:Draw()
+					render.SetMaterial( materials[k] )
+				 	if flashlight then
+						render.PushFlashlightMode(true)
+						submesh:Draw()
+						render.PopFlashlightMode()
+					else
+						submesh:Draw()
+					end
 				end
 			cam.PopModelMatrix()
 		end
@@ -213,4 +219,4 @@ function MESHCLIP.unfuckmatricies()
 	end
 end
 
-MESHCLIP.spawn("models/hunter/blocks/cube1x1x1.mdl")
+MESHCLIP.spawn("models/props_c17/FurnitureBathtub001a.mdl")

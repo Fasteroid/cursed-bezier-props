@@ -1,7 +1,7 @@
 local function reload()
 
-    include("experiments/testcontrolpoints2.lua")
-    include("entities/bezier_drag.lua")
+    --include("experiments/meshclip.lua")
+    include("autorun/properties/beziercreate.lua")
     print("init.lua")
 
 end

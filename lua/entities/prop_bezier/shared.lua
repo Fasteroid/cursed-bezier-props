@@ -6,4 +6,5 @@ ENT.Base = "base_anim"
 ENT.Type = "anim"
 
 print("prop_bezier/shared.lua")
--- TODO
+
+DEFINE_BASECLASS( ENT.Base )

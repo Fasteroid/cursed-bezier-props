@@ -6,6 +6,7 @@ function ENT:Initialize()
 
     local parent = self -- prevents confusion
     self.Drag = ents.CreateClientside("bezier_drag")
+    print(self.Drag)
     self.Drag:SetPos( self:GetPos() + self:GetForward() * 10 )
     self.Drag:SetParent(self)
 
@@ -41,4 +42,10 @@ function ENT:Draw()
     self:DrawModel()
     self.Drag:Draw() -- should probably draw on top
     render.DrawLine( self:GetPos(), self.Drag:GetPos(), linecolor)
+end
+
+function ENT:Think()
+    if self.Drag and not IsValid( self.Drag:GetParent() ) then -- stupid PVS
+        self.Drag:SetParent( self )
+    end
 end

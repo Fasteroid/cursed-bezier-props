@@ -45,7 +45,7 @@ local function getLongestAxis(box)
 	return axis, box[longest]
 end
 
-
+local renderBoundsMaxs
 local function mesh_preproc(tris)
 
 	local maxs, mins, box = getBB(tris)
@@ -66,21 +66,6 @@ local function mesh_preproc(tris)
 			
 		table.Add(tris_all,tris_right)
 	end
-
-    VERTEXLINKER.Reset()
-	VERTEXLINKER.Link(tris_all)
-    print( VERTEXLINKER.countUnique() )
-
-	local verts_processed = {}
-
-	for k, v in ipairs(tris_all) do
-		if not verts_processed[v.pos] then
-			verts_processed[v.pos] = true
-			tris_all[k].pos:Sub( axis*axisLen*(v.slice)*STEP )
-		end
-	end
-
-    -- print(table.Count(caching))
 
 	return tris_all
 
@@ -124,7 +109,9 @@ function ENT:BuildMeshes()
 
     self.Meshes = {}
     self.Materials = {}
-    self.DebugMeshes = {}
+
+    self.AccelMaster = {}
+    self.AccelTemp = {}
 
     local vismeshes, bindposes = util.GetModelMeshes( self:GetModel() )
     local clipped_vismeshes = {}
@@ -132,13 +119,17 @@ function ENT:BuildMeshes()
 
     for k, vismesh in ipairs(vismeshes) do
            
-        self:vert_unfuck(vismesh,bindposes) -- certain models are fucked and need to be unfucked
-        vismesh.triangles = mesh_preproc(vismesh.triangles)
+        self:vert_unfuck(vismesh,bindposes) -- certain models are fucked and need to be unfucked, thanks valve
 
+        vismesh.triangles = mesh_preproc(vismesh.triangles) -- TODO: find a fast way to copy these every frame without too much garbage creation
         if( #vismesh.triangles > 0 ) then
-            self.Meshes[#self.Meshes+1] = Mesh( self.Materials[k] )  -- USERDATAS ARE STUPID!!!
+            self.Meshes[#self.Meshes+1] = vismesh.triangles
             self.Materials[#self.Materials+1] = Material(vismesh.material)
-            self.Meshes[#self.Meshes]:BuildFromTriangles( vismesh.triangles )
+
+            local accel = table.Copy( VERTEXLINKER.BuildAccelStruct(vismesh.triangles) )
+
+            self.AccelMaster[#self.AccelMaster+1] = accel
+            self.AccelTemp[#self.AccelTemp+1] = VERTEXLINKER.CopyAccelStruct(accel)
         end
 
     end
@@ -155,18 +146,29 @@ function ENT:OnRemove()
     local meshes = self.Meshes
     timer.Simple( 0, function()
 		if not IsValid( self ) then -- definiely gone
-			DestroyMeshes(meshes) -- avoid leaking memory
+			--DestroyMeshes(meshes) -- avoid leaking memory
         end
 	end)
 end
 
+local sin = math.sin
+
+local empty_mesh = Mesh()
+
+function ENT:GetRenderMesh()
+    return { Mesh = empty_mesh, Material = wireframe }
+end
+
+local loler = Vector()
+
 function ENT:Draw()
-    self:SetModelScale(0)
+    
     self:DrawModel() -- lighting bug fix
 
     if ( self.Meshes ) then
-        local meshes = self.Meshes
+        local meshes = self.AccelMaster
         local materials = self.Materials
+        local acceltemp = self.AccelTemp
 
         local transform = Matrix()
         transform:Translate( self:GetPos() )
@@ -178,20 +180,27 @@ function ENT:Draw()
         color = Vector(color.r/255,color.g/255,color.b/255)
 
         local flashlight = LocalPlayer():FlashlightIsOn()
-        
+
         cam.PushModelMatrix( transform )
             for k, submesh in ipairs(meshes) do
+
+                local temp = acceltemp[k]
+                VERTEXLINKER.FlashAccelStruct(submesh, temp)
+
+                for pid, point in pairs(temp.points) do
+                    loler[3] = 5 * sin( (CurTime() + point[2]) * 20 )
+                    point[1]:Add( loler )
+                end
+
                 -- these are fucking stupid but they work
                 materials[k]:SetVector("$color",color)
                 materials[k]:SetFloat("$alpha",alpha)
-                render.SetMaterial( materials[k] )
-                if flashlight then -- TODO: why is our model transparent???
-                    -- render.PushFlashlightMode(true)
-                    submesh:Draw()
-                    -- render.PopFlashlightMode()
-                else
-                    submesh:Draw()
-                end
+                render.SetMaterial(materials[k])
+
+                local temp_mesh = Mesh( materials[k] )
+                temp_mesh:BuildFromTriangles( VERTEXLINKER.ParseAccelStruct(temp) )
+                temp_mesh:Draw()
+                temp_mesh:Destroy()
             end
         cam.PopModelMatrix()
     end

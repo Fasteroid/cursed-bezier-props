@@ -1,3 +1,5 @@
+AddCSLuaFile()
+
 VERTEXLINKER = VERTEXLINKER or {}
 local addr_lookup = {}
 local points = {}
@@ -17,12 +19,13 @@ local function point_copy(point_list)
 end
 
 local function reset()
-    addr_cache = {}
+    addr_lookup = {}
     points = {}
     addr_ptr = 0
 end
 
 local function alloc_ptr(pos, slice)
+    if type(pos) == 'number' then return pos end
     local id = v2s(pos)
     if not addr_lookup[id] then 
         addr_ptr = addr_ptr + 1
@@ -43,29 +46,35 @@ function VERTEXLINKER.BuildAccelStruct(verts)
 
     for vid, vert in ipairs(verts) do
         vert.pos = alloc_ptr(vert.pos, vert.slice)
-        struct_verts[vid] = vert
+        struct_verts[vid] = table.Copy( vert )
     end
 
     struct.points = point_copy(points)
-
+    print(#struct.verts)
     return struct -- has same verticies as [verts], but all positions are now replaced with "memory addresses" that are "pointers" to vectors in [struct.positions]
 end
 
 function VERTEXLINKER.CopyAccelStruct(struct)
     local struct_copy = {}
 
-    struct_copy.verts = struct.verts
+    struct_copy.verts = table.Copy( struct.verts )
     struct_copy.points = point_copy( struct.points )
 
     return struct_copy -- same struct but with a copy of [struct.points] so you can modify it without messing up the master copy
 end
 
 function VERTEXLINKER.FlashAccelStruct(master, recipient) -- Like doing [recipient = VERTEXLINKER.CopyAccelStruct(master)] but with less garbage production!
+    local recipient_points = recipient.points
+    local recipient_verts  = recipient.verts
     for pid, mpoint in ipairs(master.points) do
-        local rpoint = recipient[pid][1]
-        rpoint[1] = mpoint[1]
-        rpoint[2] = mpoint[2]
-        rpoint[3] = mpoint[3]
+        local mpos = mpoint[1]
+        local rpos = recipient_points[pid][1]
+        rpos[1] = mpos[1]
+        rpos[2] = mpos[2]
+        rpos[3] = mpos[3]
+    end
+    for vid, vert in ipairs(master.verts) do
+        recipient_verts[vid].pos = vert.pos
     end
 end
 
@@ -73,12 +82,13 @@ function VERTEXLINKER.ParseAccelStruct(struct)
     local verts = {}
 
     local struct_verts = struct.verts
-    local struct_points = struct.points
+    local struct_points = point_copy( struct.points )
 
     for vid, vert in ipairs(struct_verts) do
-        vert.pos = struct_points[ vert.pos ][1]
-        verts[vid] = vert
+        if type(vert.pos) == 'number' then
+            vert.pos = struct_points[ vert.pos ][1]
+        end
     end
 
-    return verts -- gets back [verts] from a vertexlinker struct
+    return struct_verts -- gets back [verts] from a vertexlinker struct
 end

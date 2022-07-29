@@ -1,3 +1,5 @@
+AddCSLuaFile()
+
 local util_IntersectRayWithPlane = util.IntersectRayWithPlane
 
 local function mix(a,b,fac)
@@ -190,10 +192,6 @@ local function slice(tris, plane_pos, plane_dir, slice)
 
     return TRIS
 end
-
-
-
-
 
 function fastMeshSlice(tris, plane_pos_1, plane_dir_1, plane_pos_2, plane_dir_2, slice_num)
     local tris = slice(tris, plane_pos_1, plane_dir_1, slice_num)

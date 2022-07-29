@@ -1,7 +1,7 @@
 local function reload()
 
     --include("experiments/meshclip.lua")
-    include("autorun/properties/beziercreate.lua")
+    include("experiments/vertexlinkertest.lua")
     print("init.lua")
 
 end

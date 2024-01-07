@@ -1,9 +1,8 @@
 AddCSLuaFile()
 
 VERTEXLINKER = VERTEXLINKER or {}
-local addr_lookup = {}
-local points = {}
-local addr_ptr = 0
+local addr_lookup = {} -- v2s(vert) => id in "points"
+local points = {}      -- array; {pos, slice}
 
 local function v2s(v)
     return "" .. math.Round(v[1],3) .. "," .. math.Round(v[2],3) .. "," .. math.Round(v[3],3)
@@ -21,14 +20,13 @@ end
 local function reset()
     addr_lookup = {}
     points = {}
-    addr_ptr = 0
 end
 
 local function alloc_ptr(pos, slice)
     if type(pos) == 'number' then return pos end
     local id = v2s(pos)
     if not addr_lookup[id] then 
-        addr_ptr = addr_ptr + 1
+        local addr_ptr = #points + 1
         addr_lookup[id] = addr_ptr
         points[addr_ptr] = {pos, slice}
     end

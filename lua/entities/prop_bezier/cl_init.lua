@@ -3,8 +3,8 @@ print("prop_bezier/cl_init.lua")
 
 include('entities/bezier_drag.lua')
 
-include('experiments/fastslice.lua')
-include('experiments/vertexlinker.lua')
+include('autorun/fastslice.lua')
+include('autorun/vertexlinker.lua')
 
 local function transformToBone(vec, bones, weights, binds) -- special thanks to derpius for helping me fix the dreaded root bone rotated models
     local final = Vector()

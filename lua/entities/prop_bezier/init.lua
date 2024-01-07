@@ -31,3 +31,14 @@ function ENT:OnRemove()
         ent:Remove()
     end
 end
+
+function ENT:Think()
+    for i=1, CONTROL_POINT_COUNT do
+        if not IsValid( self.ControlPoints[i] ) then
+            local control = ents.Create("bezier_control")
+            control:SetPos( self:GetPos() + Vector(0,0,i*10) )
+            control:Spawn()
+            self.ControlPoints[i] = control
+        end
+    end
+end
